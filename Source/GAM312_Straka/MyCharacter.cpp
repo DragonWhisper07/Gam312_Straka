@@ -1,21 +1,21 @@
 
 
 #include "MyCharacter.h"
-#include "Camera/CameraComponent.h"
-#include "Engine/EngineTypes.h" 
-#include "GameFramework/Controller.h"
-#include "GameFramework/SpringArmComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
 // Sets default values
 AMyCharacter::AMyCharacter()
 {
-	// Set this character to call Tick() every frame.
 	PrimaryActorTick.bCanEverTick = true;
 
 	PlayerCamComp = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Cam"));
 	PlayerCamComp->SetupAttachment(RootComponent);
 	PlayerCamComp->bUsePawnControlRotation = true;
+
+	BuildingArray.SetNum(3);
+	ResourcesArray.SetNum(3);
+	ResourcesNameArray.Add(TEXT("Wood"));
+	ResourcesNameArray.Add(TEXT("Stone"));
+	ResourcesNameArray.Add(TEXT("Berry"));
 }
 
 // Called when the game starts or when spawned
@@ -26,13 +26,21 @@ void AMyCharacter::BeginPlay()
 	FTimerHandle StatsTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(StatsTimerHandle, this, &AMyCharacter::DecreaseStats, 2.0f, true);
 
-	check(PlayerCamComp != nullptr); 
+	check(PlayerCamComp != nullptr);
 }
 
 // Called every frame
 void AMyCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (isBuilding && spawnedPart)
+	{
+		FVector StartLocation = PlayerCamComp->GetComponentLocation();
+		FVector Direction = PlayerCamComp->GetForwardVector() * 400.0f;
+		FVector EndLocation = StartLocation + Direction;
+		spawnedPart->SetActorLocation(EndLocation);
+	}
 }
 
 // Called to bind functionality to input
@@ -47,7 +55,8 @@ void AMyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	PlayerInputComponent->BindAction("JumpInput", IE_Pressed, this, &AMyCharacter::StartJump);
 	PlayerInputComponent->BindAction("JumpInput", IE_Released, this, &AMyCharacter::StopJump);
 
-	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AMyCharacter::FindObject); 
+	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AMyCharacter::FindObject);
+	PlayerInputComponent->BindAction("RotPart", IE_Pressed, this, &AMyCharacter::RotateBuilding);
 }
 
 void AMyCharacter::MoveForward(float AxisValue)
@@ -94,38 +103,33 @@ void AMyCharacter::FindObject()
 	QueryParams.bTraceComplex = true;
 	QueryParams.bReturnFaceIndex = true;
 
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, QueryParams))
+	if (!isBuilding)
 	{
-		AResource_M* HitResource = Cast<AResource_M>(HitResult.GetActor());
-		if (Stamina > 5.0f)
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, QueryParams))
 		{
-			if (HitResource)
+			AResource_M* HitResource = Cast<AResource_M>(HitResult.GetActor());
+			if (Stamina > 5.0f && HitResource)
 			{
 				FString hitName = HitResource->resourceName;
 				int resourceValue = HitResource->resourceAmount;
 
-				HitResource->totalResource = HitResource->totalResource - resourceValue;
+				HitResource->totalResource -= resourceValue;
 
 				if (HitResource->totalResource >= resourceValue)
 				{
 					GiveResource(resourceValue, hitName);
-
-					check(GEngine != nullptr);
-					GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource Collected"));
-
-					UGameplayStatics::SpawnDecalAtLocation(GetWorld(), hitDecal, FVector(10.0f, 10.0f, 10.0f), HitResult.Location, FRotator(-90, 0, 0), 2.0f);
-
-
 					SetStamina(-5.0f);
 				}
 				else
 				{
 					HitResource->Destroy();
-					check(GEngine != nullptr);
-					GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Resource Depleted"));
 				}
 			}
 		}
+	}
+	else
+	{
+		isBuilding = false;
 	}
 }
 
@@ -133,7 +137,7 @@ void AMyCharacter::SetHealth(float amount)
 {
 	if (Health + amount < 100)
 	{
-		Health = Health + amount;
+		Health += amount;
 	}
 }
 
@@ -141,7 +145,7 @@ void AMyCharacter::SetHunger(float amount)
 {
 	if (Hunger + amount < 100)
 	{
-		Hunger = Hunger + amount;
+		Hunger += amount;
 	}
 }
 
@@ -149,7 +153,7 @@ void AMyCharacter::SetStamina(float amount)
 {
 	if (Stamina + amount < 100)
 	{
-		Stamina = Stamina + amount;
+		Stamina += amount;
 	}
 }
 
@@ -171,16 +175,68 @@ void AMyCharacter::GiveResource(float amount, FString resourceType)
 {
 	if (resourceType == "Wood")
 	{
-		ResourcesArray[0] = ResourcesArray[0] + amount;
+		ResourcesArray[0] += amount;
+	}
+	else if (resourceType == "Stone")
+	{
+		ResourcesArray[1] += amount;
+	}
+	else if (resourceType == "Berry")
+	{
+		ResourcesArray[2] += amount;
+	}
+}
+
+void AMyCharacter::UpdateResources(float woodAmount, float stoneAmount, FString buildingObject)
+{
+	if (woodAmount <= ResourcesArray[0] && stoneAmount <= ResourcesArray[1])
+	{
+		ResourcesArray[0] -= woodAmount;
+		ResourcesArray[1] -= stoneAmount;
+
+		if (buildingObject == "Wall")
+		{
+			BuildingArray[0]++;
+		}
+		else if (buildingObject == "Floor")
+		{
+			BuildingArray[1]++;
+		}
+		else if (buildingObject == "Ceiling")
+		{
+			BuildingArray[2]++;
+		}
+	}
+}
+
+void AMyCharacter::SpawnBuilding(int buildingID, bool& isSuccess)
+{
+	if (!isBuilding)
+	{
+		if (BuildingArray[buildingID] >= 1)
+		{
+			isBuilding = true;
+			FVector StartLocation = PlayerCamComp->GetComponentLocation();
+			FVector Direction = PlayerCamComp->GetForwardVector() * 400.0f;
+			FVector EndLocation = StartLocation + Direction;
+			FRotator myRot(0, 0, 0);
+			FActorSpawnParameters SpawnParams;
+
+			BuildingArray[buildingID]--;
+			spawnedPart = GetWorld()->SpawnActor<ABuildingPart>(BuildPartClass, EndLocation, myRot, SpawnParams);
+
+			isSuccess = true;
+			return;
+		}
 	}
 
-	if (resourceType == "Stone")
-	{
-		ResourcesArray[1] = ResourcesArray[1] + amount;
-	}
+	isSuccess = false;
+}
 
-	if (resourceType == "Berry")
+void AMyCharacter::RotateBuilding()
+{
+	if (isBuilding && spawnedPart)
 	{
-		ResourcesArray[2] = ResourcesArray[2] + amount;
+		spawnedPart->AddActorWorldRotation(FRotator(0, 90, 0));
 	}
 }
