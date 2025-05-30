@@ -6,6 +6,7 @@
 #include "Resource_M.h"
 #include "Kismet/GameplayStatics.h"
 #include "BuildingPart.h"
+#include "PlayerWidget.h"
 #include "MyCharacter.generated.h"
 
 
@@ -79,6 +80,9 @@ public:
 	
 	UPROPERTY()
 	ABuildingPart* spawnedPart;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPlayerWidget* playerUI;
 
 	UFUNCTION(BlueprintCallable)
 	void SetHealth(float amount);

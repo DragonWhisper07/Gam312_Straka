@@ -34,6 +34,10 @@ void AMyCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	playerUI->UpdateBars(Health, Hunger, Stamina);
+
+
+
 	if (isBuilding && spawnedPart)
 	{
 		FVector StartLocation = PlayerCamComp->GetComponentLocation();
