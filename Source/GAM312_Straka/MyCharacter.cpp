@@ -26,6 +26,12 @@ void AMyCharacter::BeginPlay()
 	FTimerHandle StatsTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(StatsTimerHandle, this, &AMyCharacter::DecreaseStats, 2.0f, true);
 
+	if (objWidget)
+	{
+		objWidget->UpdatebuildObj(0.0f);
+		objWidget->UpdatematOBJ(0.0f);
+	}
+
 	check(PlayerCamComp != nullptr);
 }
 
@@ -122,6 +128,11 @@ void AMyCharacter::FindObject()
 				if (HitResource->totalResource >= resourceValue)
 				{
 					GiveResource(resourceValue, hitName);
+
+					matsCollected = matsCollected + resourceValue;
+
+					objWidget->UpdatematOBJ(matsCollected);
+
 					SetStamina(-5.0f);
 				}
 				else
@@ -134,6 +145,9 @@ void AMyCharacter::FindObject()
 	else
 	{
 		isBuilding = false;
+		objectsBuilt = objectsBuilt + 1.0f;
+
+		objWidget->UpdatebuildObj(objectsBuilt);
 	}
 }
 
