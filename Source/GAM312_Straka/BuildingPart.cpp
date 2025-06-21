@@ -1,32 +1,29 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "BuildingPart.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/ArrowComponent.h"
 
-// Sets default values
+// Constructor
 ABuildingPart::ABuildingPart()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	// Initialize and attach mesh component
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	PivotArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("Pivot Arrow"));
+	RootComponent = Mesh;
 
-	RootComponent = PivotArrow;
-	Mesh->SetupAttachment(PivotArrow);
+	// Initialize and attach pivot arrow
+	PivotArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("PivotArrow"));
+	PivotArrow->SetupAttachment(RootComponent);
 }
 
 // Called when the game starts or when spawned
 void ABuildingPart::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 // Called every frame
 void ABuildingPart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
-

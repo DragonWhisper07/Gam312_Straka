@@ -7,31 +7,38 @@ AMyCharacter::AMyCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	// Create and attach a first-person camera to the character's root
 	PlayerCamComp = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Cam"));
 	PlayerCamComp->SetupAttachment(RootComponent);
 	PlayerCamComp->bUsePawnControlRotation = true;
 
-	BuildingArray.SetNum(3);
-	ResourcesArray.SetNum(3);
+	// Initialize arrays for building parts and resources
+	BuildingArray.SetNum(3);  // e.g., Wall, Floor, Ceiling
+	ResourcesArray.SetNum(3); // e.g., Wood, Stone, Berry
+
+	// Add names to identify resource types (used in GiveResource logic)
 	ResourcesNameArray.Add(TEXT("Wood"));
 	ResourcesNameArray.Add(TEXT("Stone"));
 	ResourcesNameArray.Add(TEXT("Berry"));
 }
 
-// Called when the game starts or when spawned
+// Called when the game starts or the actor is spawned
 void AMyCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Start a timer that periodically decreases stats every 2 seconds
 	FTimerHandle StatsTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(StatsTimerHandle, this, &AMyCharacter::DecreaseStats, 2.0f, true);
 
+	// Reset UI progress bars
 	if (objWidget)
 	{
 		objWidget->UpdatebuildObj(0.0f);
 		objWidget->UpdatematOBJ(0.0f);
 	}
 
+	// Sanity check: ensure the camera component is valid
 	check(PlayerCamComp != nullptr);
 }
 
@@ -40,67 +47,79 @@ void AMyCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Update player HUD elements (e.g., health, hunger, stamina bars)
 	playerUI->UpdateBars(Health, Hunger, Stamina);
 
-
-
+	// Move the spawned buildable part in front of the camera if in build mode
 	if (isBuilding && spawnedPart)
 	{
 		FVector StartLocation = PlayerCamComp->GetComponentLocation();
 		FVector Direction = PlayerCamComp->GetForwardVector() * 400.0f;
 		FVector EndLocation = StartLocation + Direction;
+
 		spawnedPart->SetActorLocation(EndLocation);
 	}
 }
 
-// Called to bind functionality to input
+// Bind player input controls
 void AMyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	// Movement and look controls
 	PlayerInputComponent->BindAxis("MoveForward", this, &AMyCharacter::MoveForward);
 	PlayerInputComponent->BindAxis("MoveRight", this, &AMyCharacter::MoveRight);
 	PlayerInputComponent->BindAxis("LookUp", this, &AMyCharacter::AddControllerPitchInput);
 	PlayerInputComponent->BindAxis("Turn", this, &AMyCharacter::AddControllerYawInput);
-	PlayerInputComponent->BindAction("JumpInput", IE_Pressed, this, &AMyCharacter::StartJump);
-	PlayerInputComponent->BindAction("JumpInput", IE_Released, this, &AMyCharacter::StopJump);
 
+	// Jump control
+	PlayerInputComponent->BindAction("JumpEvent", IE_Pressed, this, &AMyCharacter::StartJump);
+	PlayerInputComponent->BindAction("JumpEvent", IE_Released, this, &AMyCharacter::StopJump);
+
+	// Interact and build rotation
 	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AMyCharacter::FindObject);
 	PlayerInputComponent->BindAction("RotPart", IE_Pressed, this, &AMyCharacter::RotateBuilding);
 }
 
+// Character movement logic - forward/backward
 void AMyCharacter::MoveForward(float AxisValue)
 {
 	if (Controller && AxisValue != 0.0f)
 	{
 		FRotator Rotation = Controller->GetControlRotation();
 		FRotator YawRotation(0, Rotation.Yaw, 0);
+
 		FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 		AddMovementInput(Direction, AxisValue);
 	}
 }
 
+// Character movement logic - left/right
 void AMyCharacter::MoveRight(float AxisValue)
 {
 	if (Controller && AxisValue != 0.0f)
 	{
 		FRotator Rotation = Controller->GetControlRotation();
 		FRotator YawRotation(0, Rotation.Yaw, 0);
+
 		FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		AddMovementInput(Direction, AxisValue);
 	}
 }
 
+// Called when jump input is pressed
 void AMyCharacter::StartJump()
 {
 	bPressedJump = true;
 }
 
+// Called when jump input is released
 void AMyCharacter::StopJump()
 {
 	bPressedJump = false;
 }
 
+// Triggers either resource collection or finalizes building placement
 void AMyCharacter::FindObject()
 {
 	FHitResult HitResult;
@@ -115,6 +134,7 @@ void AMyCharacter::FindObject()
 
 	if (!isBuilding)
 	{
+		// Attempt to hit a resource actor
 		if (GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, QueryParams))
 		{
 			AResource_M* HitResource = Cast<AResource_M>(HitResult.GetActor());
@@ -128,29 +148,27 @@ void AMyCharacter::FindObject()
 				if (HitResource->totalResource >= resourceValue)
 				{
 					GiveResource(resourceValue, hitName);
-
-					matsCollected = matsCollected + resourceValue;
-
+					matsCollected += resourceValue;
 					objWidget->UpdatematOBJ(matsCollected);
-
 					SetStamina(-5.0f);
 				}
 				else
 				{
-					HitResource->Destroy();
+					HitResource->Destroy(); // Resource depleted
 				}
 			}
 		}
 	}
 	else
 	{
+		// Finalize building placement
 		isBuilding = false;
-		objectsBuilt = objectsBuilt + 1.0f;
-
+		objectsBuilt += 1.0f;
 		objWidget->UpdatebuildObj(objectsBuilt);
 	}
 }
 
+// Add to health, clamped under 100
 void AMyCharacter::SetHealth(float amount)
 {
 	if (Health + amount < 100)
@@ -159,6 +177,7 @@ void AMyCharacter::SetHealth(float amount)
 	}
 }
 
+// Add to hunger, clamped under 100
 void AMyCharacter::SetHunger(float amount)
 {
 	if (Hunger + amount < 100)
@@ -167,6 +186,7 @@ void AMyCharacter::SetHunger(float amount)
 	}
 }
 
+// Add to stamina, clamped under 100
 void AMyCharacter::SetStamina(float amount)
 {
 	if (Stamina + amount < 100)
@@ -175,6 +195,7 @@ void AMyCharacter::SetStamina(float amount)
 	}
 }
 
+// Decreases hunger periodically and regenerates stamina
 void AMyCharacter::DecreaseStats()
 {
 	if (Hunger > 0)
@@ -183,12 +204,14 @@ void AMyCharacter::DecreaseStats()
 	}
 	SetStamina(10.0f);
 
+	// Penalize health if starving
 	if (Hunger <= 0)
 	{
 		SetHealth(-3.0f);
 	}
 }
 
+// Adds resource amount to proper index in the array
 void AMyCharacter::GiveResource(float amount, FString resourceType)
 {
 	if (resourceType == "Wood")
@@ -205,6 +228,7 @@ void AMyCharacter::GiveResource(float amount, FString resourceType)
 	}
 }
 
+// Deducts resources and increases building counts
 void AMyCharacter::UpdateResources(float woodAmount, float stoneAmount, FString buildingObject)
 {
 	if (woodAmount <= ResourcesArray[0] && stoneAmount <= ResourcesArray[1])
@@ -227,6 +251,7 @@ void AMyCharacter::UpdateResources(float woodAmount, float stoneAmount, FString 
 	}
 }
 
+// Spawns a building part in front of the player
 void AMyCharacter::SpawnBuilding(int buildingID, bool& isSuccess)
 {
 	if (!isBuilding)
@@ -234,6 +259,7 @@ void AMyCharacter::SpawnBuilding(int buildingID, bool& isSuccess)
 		if (BuildingArray[buildingID] >= 1)
 		{
 			isBuilding = true;
+
 			FVector StartLocation = PlayerCamComp->GetComponentLocation();
 			FVector Direction = PlayerCamComp->GetForwardVector() * 400.0f;
 			FVector EndLocation = StartLocation + Direction;
@@ -251,6 +277,7 @@ void AMyCharacter::SpawnBuilding(int buildingID, bool& isSuccess)
 	isSuccess = false;
 }
 
+// Rotates the building part 90 degrees in world space
 void AMyCharacter::RotateBuilding()
 {
 	if (isBuilding && spawnedPart)
